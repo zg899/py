@@ -5,6 +5,163 @@ from geopy.distance import geodesic
 import numpy as np
 import chardet
 from room_rules import preprocess_name_kr, preprocess_name_jp, compare_smoke_types, check_smoking_rule, check_max_occupancy, compare_areas, compare_bed_codes, compare_bed_numbers
+from fuzzywuzzy import fuzz
+
+
+win_file = r'D:\1008\py_code\py\data\hotel\\'  # 文件夹路径
+win_file_r = r'D:\1008\py_code\py\data\room\\' # Room 文件路径
+win_file_rtx = r'D:\1008\py_code\py\data\hotel\rtx_all\\'  # 酒店 文件夹路径
+win_file_zyx = r'D:1008\py_code\py\data\zyx_order\\' # ZYX 订单分析文件夹
+
+# 未入住订单的 酒店，房型，产品，吸烟，最大入住人数核实函数 
+# 与供应商部分核实
+def process_reservation_data(input_file, output_file):
+    # 读取Excel文件
+    df = pd.read_excel(input_file)
+
+    # 应用筛选条件（示例，需要根据实际情况调整）
+    # df = df[df['your_column'] == 'your_condition']
+
+    # 相似度计算（假设calculate_similarity函数已定义）
+    df['name_similarity'] = df.apply(lambda row: calculate_similarity(row['zyx_hotel_name_en'], row['sup_hotel_name_en']), axis=1)
+    df['roomtype_name_similarity'] = df.apply(lambda row: calculate_similarity(row['zyx_roomtype_name_en'], row['sup_roomtype_name_en']), axis=1)
+    df['product_name_similarity'] = df.apply(lambda row: calculate_similarity(row['zyx_product_name_en'], row['sup_product_name_en']), axis=1)
+    
+    
+    # 对比zyx_smoking_policy 和 sup_smoking_policy
+    # 数据转换函数 , 给浩海擦屁股函数 unkown 改成 unknow
+    def transform_sup_smoking_policy(value):
+        if value == 1:
+            return 'Non-Smoking'
+        elif value == 2:
+            return 'Smoking'
+        elif pd.isnull(value) or value == 0 or value == 'unkown':
+            return 'unknow'
+        else:
+            return 'unknow'  # 保持默认情况处理未知情况
+
+    def transform_zyx_smoking_policy(value):
+        if pd.isnull(value) or value == 1:
+
+            return 'unknow'
+        
+        elif value == 'unkonw':
+            #print("un")
+            return 'unknow'
+        
+        else:
+            
+            return value  # 其他值保持不变
+
+    # 应用转换函数并比较
+    df['transformed_sup_smoking_policy'] = df['sup_smoking_policy'].apply(transform_sup_smoking_policy)
+    df['transformed_zyx_smoking_policy'] = df['zyx_smoking_policy'].apply(transform_zyx_smoking_policy)
+    df['smoking_policy_match'] = df.apply(lambda row: row['transformed_sup_smoking_policy'] == row['transformed_zyx_smoking_policy'], axis=1)
+
+    # 对比zyx_max_count 和 sup_max_count
+    df['max_count_match'] = df.apply(lambda row: row['zyx_max_count'] == row['sup_max_count'], axis=1)
+
+    # 导出到新的Excel文件
+    df.to_excel(output_file, index=False)
+
+
+# 排除已经聚合和 怀疑聚合酒店，剩下的新创建函数
+# for RTX
+def rtx_new_mapping_check(rtx_csv, rtx_file1, rtx_file2, output_csv):
+    # 步骤1: 导入rtx_csv文件，过滤hotel_code有值的数据，留下为空的数据
+    rtx_df = pd.read_csv(rtx_csv)
+    rtx_df_filtered = rtx_df[rtx_df['hotel_code'].isna()]
+    print(f"步骤1完成后的rtx-hotelid数量: {len(rtx_df_filtered)}")
+    
+    # 步骤2: 导入rtx_file1和rtx_file2文件，获取rtx-hotelid的值
+    rtx_ids_1 = pd.read_excel(rtx_file1, dtype={'rtx-hotelid': str})['rtx-hotelid'].unique()
+    rtx_ids_2 = pd.read_excel(rtx_file2, dtype={'rtx-hotelid': str})['rtx-hotelid'].unique()
+    print(f"步骤2导入的rtx_file1中rtx-hotelid数量: {len(rtx_ids_1)}")
+    print(f"步骤2导入的rtx_file2中rtx-hotelid数量: {len(rtx_ids_2)}")
+    
+    # 步骤3: 从rtx_df_filtered中移除在rtx_ids_1和rtx_ids_2中出现的rtx-hotelid
+    rtx_ids_to_remove = set(rtx_ids_1).union(set(rtx_ids_2))
+    mask = rtx_df_filtered['rtx-hotelid'].apply(lambda x: x not in rtx_ids_to_remove)
+    rtx_df_final = rtx_df_filtered[mask]
+    print(f"步骤3移除后剩余的rtx-hotelid数量: {len(rtx_df_final)}")
+    
+    # 步骤4: 将剩余的数据导出到一个新的CSV文件
+    rtx_df_final.to_csv(output_csv, index=False, encoding='utf-8-sig')
+    print(f"数据已导出到{output_csv}")
+
+
+def is_japan_latitude(lat):
+    """检查纬度是否在日本的范围内"""
+    return 24 <= lat <= 46
+
+def is_japan_longitude(lon):
+    """检查经度是否在日本的范围内"""
+    return 122 <= lon <= 153
+
+def safe_geodesic(latlon1, latlon2):
+    lat1, lon1 = latlon1
+    lat2, lon2 = latlon2
+
+    # 检查是否在日本的经纬度范围内
+    if not (is_japan_latitude(lat1) and is_japan_longitude(lon1) and is_japan_latitude(lat2) and is_japan_longitude(lon2)):
+        print(f"Coordinates are not within Japan: {latlon1} or {latlon2}")
+        return None  # 不在日本范围内时跳过计算
+
+    return geodesic((lat1, lon1), (lat2, lon2)).meters
+
+# 新酒店聚合
+def new_hotel_mapping_check(zyx_csv, rtx_csv, mapped_csv, unmapped_csv):
+
+    def read_csv_files(zyx_csv, rtx_csv):
+        try:
+            zyx_df = pd.read_csv(zyx_csv, sep='\t', on_bad_lines='skip')
+            print(zyx_df.head())
+            print(zyx_df.columns)
+            # 导入数据，使用on_bad_lines='skip'来跳过格式不正确的行
+            rtx_df = pd.read_csv(rtx_csv, sep=',', on_bad_lines='skip')
+
+            # 保留 'hotel_code' 列为空的行
+            rtx_df = rtx_df[rtx_df['hotel_code'].isna()]
+            
+            print(rtx_df.head())
+            print(rtx_df.columns)
+            return zyx_df, rtx_df
+        except Exception as e:
+            print(f"Error reading CSV files: {e}")
+            return None, None
+    def merge_on_post(zyx_df, rtx_df):
+        merged_df = pd.merge(zyx_df, rtx_df, left_on='post_all', right_on='sup_post')
+        return merged_df
+
+    def calculate_similarity_and_distance(row):
+        row['name_similarity'] = calculate_similarity(row['name'], row['sup_name'])
+        row['distance_meters'] = safe_geodesic((row['zyx_lat'], row['zyx_long']), (row['sup_lat'], row['sup_long']))
+        if row['name_similarity'] == 100 and row['distance_meters'] is not None and row['distance_meters'] < 100:
+            row['mapped'] = 'Yes'
+        else:
+            row['mapped'] = 'No'
+        return row
+
+    def process_data(merged_df):
+        processed_df = merged_df.apply(calculate_similarity_and_distance, axis=1)
+        return processed_df
+    
+    def save_to_csv(processed_df, mapped_csv, unmapped_csv):
+        mapped_df = processed_df[processed_df['mapped'] == 'Yes']
+        unmapped_df = processed_df[processed_df['mapped'] == 'No']
+    
+        mapped_df.to_csv(mapped_csv, index=False)
+        unmapped_df.to_csv(unmapped_csv, index=False)
+
+    def main(zyx_csv, rtx_csv, mapped_csv, unmapped_csv):
+        zyx_df, rtx_df = read_csv_files(zyx_csv, rtx_csv)
+        merged_df = merge_on_post(zyx_df, rtx_df)
+        processed_df = process_data(merged_df)
+        
+        save_to_csv(processed_df, mapped_csv, unmapped_csv)
+        print('创建文件！')
+    # 调用主函数，指定输入和输出文件的路径
+    main(zyx_csv, rtx_csv, mapped_csv, unmapped_csv)
 
 
 def read_excel(filename, sheet_name=None):
@@ -20,7 +177,7 @@ def save_csv(df, filename):
     """将 DataFrame 保存到 CSV 文件，显示进度"""
     start_time = time.time()
     print(f"开始保存到 {filename}")
-    df.to_csv(filename, index=False)
+    df.to_csv(filename, sep='\t', index=False)
     end_time = time.time()
     print(f"完成保存到 {filename}，耗时 {end_time - start_time:.2f} 秒")
    
@@ -372,3 +529,99 @@ def zyx_all_room_check_csv(input_csv, ok_csv, check_csv, no_mather_csv):
     # 计算执行时间
     end_time = time.time()
     print(f"执行时间：{end_time - start_time}秒。") 
+
+
+# 导入XLSX 文件，排除相同的内容后，输出csv
+def process_and_export_excel(input_filepath, output_filepath):
+    # 读取Excel文件
+    df = pd.read_excel(input_filepath)
+
+    # 指定基于哪些列检查重复项
+    columns_to_check = ['hotelId', 'rtx-hotelid', 'zyx_name', 'rtx_name']
+
+    # 删除重复项，保留第一次出现的项
+    df_deduplicated = df.drop_duplicates(subset=columns_to_check, keep='first')
+
+    # 将处理后的DataFrame导出到CSV文件，使用制表符作为分隔符
+    df_deduplicated.to_csv(output_filepath, sep='\t', index=False)
+
+    print("处理完成，文件已保存至:", output_filepath)
+
+
+# 从全部酒店中，排除已经聚合酒店，导出剩余酒店
+# 这里参数是 RTX ID
+def process_and_export_files(csv_file_path, xlsx_file_path, output_file_path):
+     
+    #清理文件
+    csv_file_path2 = (win_file_rtx + 'rtx_all_hotelMP_0414v2.csv')
+    try:
+        with open(csv_file_path, 'r', encoding='utf-8') as file:
+            lines = file.readlines()
+        # 去除每一行中的双引号和逗号
+        cleaned_lines = [line.replace('"', '').replace(',', '') for line in lines]
+        # 将清理后的数据写入新文件
+        with open(csv_file_path2, 'w', encoding='utf-8') as file:
+            file.writelines(cleaned_lines)
+        print("文件已清理并保存为新文件。")
+    except Exception as e:
+        print(f"处理文件时发生错误：{e}")
+
+    # 其他的处理逻辑保持不变
+    df_csv = pd.read_csv(csv_file_path, encoding='utf-8', sep='\t')
+
+
+    print(df_csv.columns)  # 打印所有列名，检查是否与 'rtx-hotelid' 完全匹配
+    df_xlsx = pd.read_excel(xlsx_file_path)
+    rtx_ids_in_csv = set(df_csv['rtx-hotelid'].dropna().unique())
+    df_filtered_xlsx = df_xlsx[~df_xlsx['rtx-hotelid'].isin(rtx_ids_in_csv)]
+    
+    with pd.ExcelWriter(output_file_path) as writer:
+        df_csv.to_excel(writer, sheet_name='RTX Data from CSV', index=False)
+        df_filtered_xlsx.to_excel(writer, sheet_name='Filtered RTX Data from XLSX', index=False)
+
+    print(f"数据已成功导出到 {output_file_path}")
+
+
+# 从全部酒店中，排除已经聚合酒店，导出剩余酒店
+# 这里参数是 RTX ID
+
+
+def process_and_export_files2(csv_file_path, xlsx_file_path, output_file_path):
+    # 清理文件
+    csv_file_path2 = csv_file_path.replace('.csv', '_cleaned.csv')
+    try:
+        with open(csv_file_path, 'r', encoding='utf-8') as file:
+            lines = file.readlines()
+        # 去除每一行中的双引号和逗号
+        cleaned_lines = [line.replace('"', '').replace(',', '') for line in lines]
+        # 将清理后的数据写入新文件
+        with open(csv_file_path2, 'w', encoding='utf-8') as file:
+            file.writelines(cleaned_lines)
+        print("文件已清理并保存为新文件。")
+    except Exception as e:
+        print(f"处理文件时发生错误：{e}")
+
+    # 读取清理后的CSV文件，假设数据列用'\t'分隔
+    df_csv = pd.read_csv(csv_file_path2, sep='\t', dtype=str)
+    print(df_csv.columns)  # 打印所有列名，检查是否与 'rtx-hotelid' 完全匹配
+
+    # 读取XLSX文件
+    df_xlsx = pd.read_excel(xlsx_file_path, sheet_name='Filtered RTX Data from XLSX', dtype=str)
+
+    # 从CSV文件中寻找特定类型并提取对应的hotelid
+    df_csv_filtered = df_csv[df_csv['sup_type'] == 'M122031274']
+    out_hotel_codes = set(df_csv_filtered['out_hotel_code'].dropna().unique())
+
+    # 根据out_hotel_code从XLSX文件中筛选数据
+    df_final = df_xlsx[~df_xlsx['rtx-hotelid'].isin(out_hotel_codes)]
+
+    # 输出到Excel文件
+    with pd.ExcelWriter(output_file_path) as writer:
+        df_final.to_excel(writer, sheet_name='Final Filtered Data', index=False)
+
+    print(f"数据已成功导出到 {output_file_path}")
+
+
+
+
+print("这是 csv_rules.py 底部") 

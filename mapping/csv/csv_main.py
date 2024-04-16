@@ -3,13 +3,22 @@
 # 最后更新 ： 2024.03.14 17:42
 # step1 : 提取指定资源的酒店列表
 # step2 : 用 1 列表找到 zyx hotel code ，并列出所有zyx酒店信息
-# 
 
-from csv_rules import read_excel, read_csv, save_csv, filter_and_export_csv, convert_csv_to_xlsx, process_csv, filter_and_export_csv, zyx_all_room_check_csv
+from csv_rules import (
+    read_excel, read_csv, process_reservation_data, save_csv,
+    filter_and_export_csv, convert_csv_to_xlsx, process_csv,
+    zyx_all_room_check_csv, new_hotel_mapping_check, rtx_new_mapping_check,
+    process_and_export_excel,process_and_export_files,process_and_export_files2
+)
+
 import time
 from tqdm import tqdm
 import pandas as pd
 import os
+import re
+import chardet
+import csv
+import numpy as np
 
 # 打印当前工作目录
 print(os.getcwd())
@@ -17,17 +26,29 @@ print(os.getcwd())
 # 更改当前工作目录
 # os.chdir('/path/to/your/directory')
 
-win_file = r'D:\Gfile\mapping28\csv\data\\'  # 文件夹路径
+win_file = r'D:\1008\py_code\py\data\hotel\\'  # 酒店 文件夹路径
+win_file_r = r'D:\1008\py_code\py\data\room\\' # Room 文件路径
+win_file_rtx = r'D:\1008\py_code\py\data\hotel\rtx_all\\'  # 酒店 文件夹路径
+win_file_zyx = r'D:\1008\py_code\py\data\zyx_order\\' # ZYX 订单分析文件夹
+
 def main():
     while True:
-        print("\n可用操作：")
-        print("1 - HOTEL: 导入供应商酒店数据，确认与ZYX的聚合关系。")
-        print("2 - HOTEL: 通过step1的聚合关系，进一步找到ZYX的酒店基础信息，并排列到一起")
-        print("3 - ROOM：确认母房型不为空的房型，导出csv文件")
+        print("\n可用操作: ")
+        print("1 - HOTEL: 导入供应商酒店数据, 确认与ZYX的聚合关系。")
+        print("1.1 - HOTEL : 通过step1的聚合酒店中，排除已聚合酒店, 确认剩余未聚合酒店与ZYX ALL日本酒店的聚合关系。输出疑似聚合酒店和新酒店2个CSV文件")
+        print("1.2 - HOTEL : TX 剩余新酒店和ZXY 已有酒店 匹配看看，有没有相同的")
+        print("1.3 - HOTEL : 排除有可能聚合的RTX code 排除已经聚合的 RTX code 剩下的就是新增酒店")
+        print("1.4 - Hotel : 检查相同酒店排除后创建csv")
+        print("1.5 - Hotel : 排除聚合数据，剩下新创建的酒店列表")
+        print("1.6 - Hotel : 排除已聚合数据，剩下新创建的酒店列表")
+        print("2 - HOTEL: 通过step1的聚合关系,进一步找到ZYX的酒店基础信息,并排列到一起")
+        print("3 - ROOM : 确认母房型不为空的房型, 导出csv文件")
         print("4 - ROOM : 临时需求，导入的CSV 排序好后输出XLSX")
-        print("5 - HOTEL: 用step2完成的数据查找，名称，地址相似度，经纬度距离，邮编是否一致")
-        print("6 - HOTEL: 导出2个csv文件。名称100%,距离小于100米，邮编一样的OK，剩余的check")
-        print("7 - ROOM : 导入全部房型文件csv；分3个csv出来")
+        print("5 - HOTEL: 用step2完成的数据查找,名称，地址相似度，经纬度距离，邮编是否一致")
+        print("6 - HOTEL: 导出2个csv文件。名称100%,距离小于100米,邮编一样的OK, 剩余的check")
+        print("7 - ROOM : 导入全部房型文件csv, 分3个csv出来")
+
+        print("8 - 未入住订单核实：酒店，房型，产品，吸烟，最大入住")
         #  1, 全部正确房型 名称一样，最大入住人数母房型不大于子房型，面积属性一样（没有或数字一样），床型一样（考虑 others=other等逻辑),床数量一样，吸烟属性一样
         #  2, 除了正确之外的所有房型，标注是哪里有问题，名称不一样就输出 False,面积，床型，床数量，吸烟属性等，都用 TRUE，FALSE 表示
         #  3, 没有母房型的所有房型
@@ -36,6 +57,19 @@ def main():
 
         if choice == '1':
             step1()
+        elif choice == '1.1':
+            step1_1()
+        elif choice == '1.2':
+            step1_2()
+        elif choice =='1.3':
+            step1_3()
+        elif choice =='1.4':
+            step1_4()
+        elif choice =='1.5':
+            step1_5()
+        elif choice =='1.6':
+            step1_6()
+
         elif choice == '2':
             step2()
         elif choice == '3':
@@ -48,6 +82,9 @@ def main():
             step6()
         elif choice == '7':
             step7()
+        elif choice == '8':
+            step8()
+
         elif choice == 'q' or choice == 'Q':
             print("退出程序")
             break
@@ -63,12 +100,16 @@ def step1(): # 导入并合并后导出程序
     start_time = time.time()
     print("程序开始执行")
     # 读取数据
-    df_zyxallcsv = read_csv(win_file + 'zyxAllHotel_0314v2.csv')
+    # df_zyxallcsv = read_csv(win_file + 'zyxHotel_JP_0409v1.csv') # 全部ZYX酒店csv
+    # df_rtx = read_excel(win_file + 'ZYX_RTX JP Template (20240207).xlsx', sheet_name='data') # 全部RTX数据 xlsx 
+    df_jalan = read_excel(win_file + 'GAS_20240402.xlsx', sheet_name='GAS_list_English') # 全部Jalan数据 xlsx  
+    mapping_df = read_csv(win_file + 'zyxHotelMapping_JP_0409v1.csv') # 全部ZYX酒店供应商聚合关系csv
+
+    '''
     df_jalan = read_excel(win_file + 'zyx_all_hotel0314.xlsx', sheet_name='jalan_hotel')
     df_jtb = read_excel(win_file + 'zyx_all_hotel0314.xlsx', sheet_name='jtb_hotel')
-    df_rtx = read_excel(win_file + 'zyx_all_hotel0314.xlsx', sheet_name='rtx_hotel')
     df_ynj = read_excel(win_file + 'zyx_all_hotel0314.xlsx', sheet_name='yanolja_hotel')
-    mapping_df = read_excel(win_file + 'zyx_all_hotel0314.xlsx', sheet_name='mapping')
+    mapping_df_old = read_excel(win_file + 'zyx_all_hotel0314.xlsx', sheet_name='mapping')
     
     # 准备数据
     # rtx
@@ -80,20 +121,29 @@ def step1(): # 导入并合并后导出程序
         'latitude': 'sup_long',
         'longitude': 'sup_lat'
     })
-    df_mapping_filtered_rtx = mapping_df[mapping_df['channel'] == 'M122031274'] # RTX
+    df_mapping_filtered_rtx = mapping_df[mapping_df['sup_type'] == 'M122031274'] # RTX
+
+    print(df_mapping_filtered_rtx)
+
+    input("按回车键继续...")
+    '''
     
     # 准备数据
     # jalan
-    df_excel_renamed_jalan = df_jalan.rename(columns={
-        'hotelId': 'jalan-hotelid',
-        'hotelNameEnglish': 'sup_name',
-        'addressEnglish': 'sup_add',
-        'postalCode': 'sup_post',
-        'latitudeW': 'sup_lat',
-        'longitudeW': 'sup_long'
-    })
-    df_mapping_filtered_jalan = mapping_df[mapping_df['channel'] == 'M121111273'] # JALAN
     
+    df_excel_renamed_jalan = df_jalan.rename(columns={
+        'HOTELID': 'jalan-hotelid',
+        'NAME': 'sup_name',
+        'ADDRESS': 'sup_add',
+        'POSTALCODE': 'sup_post',
+        'LATITUDE': 'sup_lat',
+        'LONGITUDE': 'sup_long'
+    })
+    df_mapping_filtered_jalan = mapping_df[mapping_df['sup_type'] == 'M121111273'] # JALAN
+    print(df_mapping_filtered_jalan)
+    print(df_excel_renamed_jalan)
+    input("按回车键继续...")
+    '''
     # 准备数据
     # yanolja
     df_excel_renamed_ynj = df_ynj.rename(columns={
@@ -120,20 +170,26 @@ def step1(): # 导入并合并后导出程序
 
     # 合并数据 检查 columns
     print(df_excel_renamed_rtx.columns)
-    print(df_excel_renamed_jalan.columns)
-    print(df_excel_renamed_jtb.columns)
-    print(df_excel_renamed_ynj.columns)
+    #print(df_excel_renamed_jalan.columns)
+    #print(df_excel_renamed_jtb.columns)
+    #print(df_excel_renamed_ynj.columns)
     
     # 对于 RTX
     result_df_rtx = df_excel_renamed_rtx.merge(df_mapping_filtered_rtx[['out_hotel_code', 'hotel_code']], how='left', left_on='rtx-hotelid', right_on='out_hotel_code')
     rtx_columns = ['rtx-hotelid','sup_name','sup_add','sup_post','sup_lat','sup_long','out_hotel_code','hotel_code']
     result_df_rtx = result_df_rtx[rtx_columns]
-    
+    '''
     # 对于 Jalan
+    df_excel_renamed_jalan['jalan-hotelid'] = df_excel_renamed_jalan['jalan-hotelid'].astype(str)
+    #df_mapping_filtered_jalan['out_hotel_code'] = df_mapping_filtered_jalan['out_hotel_code'].astype(str)
+    df_mapping_filtered_jalan.loc[:, 'out_hotel_code'] = df_mapping_filtered_jalan['out_hotel_code'].astype(str)
+
+    result_df_jalan = df_excel_renamed_jalan.merge(df_mapping_filtered_jalan[['out_hotel_code', 'hotel_code']], how='left', left_on='jalan-hotelid', right_on='out_hotel_code')
+
     result_df_jalan = df_excel_renamed_jalan.merge(df_mapping_filtered_jalan[['out_hotel_code', 'hotel_code']], how='left', left_on='jalan-hotelid', right_on='out_hotel_code')
     jalan_columns = ['jalan-hotelid', 'sup_name','sup_add','sup_post','sup_lat','sup_long','out_hotel_code','hotel_code']
     result_df_jalan = result_df_jalan[jalan_columns]
-    
+    '''
     # 对于 JTB
     result_df_jtb = df_excel_renamed_jtb.merge(df_mapping_filtered_jtb[['out_hotel_code', 'hotel_code']], how='left', left_on='jtb-hotelid', right_on='out_hotel_code')
     jtb_columns = ['jtb-hotelid','sup_name','sup_add','sup_post','sup_lat','sup_long','out_hotel_code','hotel_code']
@@ -147,10 +203,6 @@ def step1(): # 导入并合并后导出程序
     # 合并后，检查结果 DataFrame
     #print("合并后的 JTB 数据行数:", len(result_df_jtb))
     
-    # 保存数据到 CSV
-    save_csv(result_df_rtx, win_file + 'RTXmaping_check0317.csv')
-    print("RTXmaping_check0317.csv 文件已创建。")
-    
     save_csv(result_df_jalan, win_file + 'Jalanmaping_check0317.csv')
     print("Jalanmaping_check0317.csv 文件已创建。")
     
@@ -159,13 +211,191 @@ def step1(): # 导入并合并后导出程序
     
     save_csv(result_df_ynj, win_file + 'YNJmaping_check0317.csv')
     print("YNJmaping_check0317.csv 文件已创建。")
-    
+    '''
+    # 保存数据到 CSV
+    save_csv(result_df_jalan, win_file + 'jalan0411_setp1.csv')
+    print("jalan0411_setp1.csv 文件已创建。")
+
     end_time = time.time()
     print(f"程序执行结束，总耗时 {end_time - start_time:.2f} 秒")
     
     print("步骤 1 完成")
     input("按回车键继续...")
     
+
+
+# 导入 新版 | 格式分割的 zyx all 酒店
+# 从地址中分割 post 出来
+# 创建一个 csv 文件
+
+def step1_1():
+    start_time = time.time()
+    print("执行步骤 1_1...")
+    # 读取ZYX 所有酒店 csv
+    # 使用chardet检测文件的编码
+    with open(win_file + 'zyxHotel_JP_0409v2.csv', 'rb') as file:
+        result = chardet.detect(file.read(100000))  # 读取文件的前100000字节来猜测编码
+        encoding = result['encoding']
+
+    # 使用检测到的编码读取CSV文件
+    # df = pd.read_csv(win_file + 'zyxHotel_JP_0409v1.csv', sep='|', encoding=encoding)
+    df = pd.read_csv(win_file + 'zyxHotel_JP_0409v2.csv', sep='|', encoding=encoding, on_bad_lines='skip')
+    # 检查DataFrame的前几行
+   
+
+    # df = pd.read_csv(win_file + 'zyxHotel_JP_0409v1.csv', sep='|') 
+    
+    # 更新正则表达式以匹配三种格式：3个数字-4个数字、3个数字空格4个数字、7个连续的数字
+    pattern = r'\b\d{3}-\d{4}\b|\b\d{3} \d{4}\b|\b\d{7}\b'
+
+    # 定义一个函数来搜索和返回格式化的邮政编码字符串
+    def find_postal_code(text):
+    # 尝试匹配三种格式中的任意一种
+        match = re.search(pattern, text)
+        if match:
+            matched_str = match.group()
+            # 如果匹配到的是7个连续数字，将其分割为3个数字-4个数字的格式
+            if len(matched_str) == 7:
+                return matched_str[:3] + '-' + matched_str[3:]
+                # 如果匹配到的是3个数字空格4个数字的格式，将空格替换为破折号
+            elif ' ' in matched_str:
+                return matched_str.replace(' ', '-')
+            # 如果已经是3个数字-4个数字的格式，直接返回
+            else:
+                return matched_str
+        else:
+            return None
+
+    # 应用函数到G列，将结果存储在新列I中
+    df['extracted_post'] = df['address'].apply(find_postal_code)
+    print(df.head())
+    print(df.columns)
+    # 使用np.where进行条件选择
+    # 首先检查'post'列是否有值（不是NaN或空字符串），如果有值，就使用'post'列的值；
+    # 如果'post'列没有值，检查'extracted_post'列，使用'extracted_post'列的值；
+    # 如果两个都没有值，结果为None（通过np.nan表示）。
+    df['post_all'] = np.where(df['post'].notna() & (df['post'] != ''), df['post'], 
+                          np.where(df['extracted_post'].notna(), df['extracted_post'], np.nan))
+
+    # 如果你想在没有任何值的情况下保留空字符串而不是NaN，可以这样做：
+    df['post_all'] = np.where(df['post'].notna() & (df['post'] != ''), df['post'], 
+                          np.where(df['extracted_post'].notna(), df['extracted_post'], ''))
+
+    # 保存处理后的DataFrame到新的csv文件
+    save_csv(df, win_file + 'ZYX_all_0409_setp2.csv')
+
+    print("ZYX_all_0409_setp2.csv 文件已创建。")
+
+    end_time = time.time()
+    print(f"程序执行结束，总耗时 {end_time - start_time:.2f} 秒")
+    
+    print("步骤 1_1 完成")
+    input("按回车键继续...")
+
+
+# rtx 全部酒店处理后的 csv,
+# zyx 全部酒店处理后的 csv,
+# 应用酒店聚合函数。寻找相同邮编，经纬度小于100米，名称相似度高的酒店
+ 
+def step1_2():
+    start_time = time.time()
+    print("执行步骤 1_2...")  
+    
+    zyx_csv = (win_file + 'ZYX_all_0409_setp2.csv')
+    rtx_csv = (win_file + 'RTX0409_setp1.csv')
+    mapped_csv = (win_file + 'zyx_rtx_new_mapped.csv')
+    unmapped_csv = (win_file + 'zyx_rtx_new_Unmapped.csv')
+
+    new_hotel_mapping_check(zyx_csv, rtx_csv, mapped_csv, unmapped_csv)
+    print("zyx rtx new 聚合文件已创建。")
+
+    end_time = time.time()
+    print(f"程序执行结束，总耗时 {end_time - start_time:.2f} 秒")
+    
+    print("步骤 1_2 完成")
+    input("按回车键继续...")
+
+# RTX 排除已聚合和 怀疑聚合code 剩余code 就是新增酒店
+def step1_3():
+    start_time = time.time()
+    print("执行步骤 1_3...")  
+    
+    
+    rtx_csv = (win_file + 'RTX0409_setp1.csv')
+    rtx_file1 = (win_file + 'zyx_rtx_new_same_507.xlsx')
+    rtx_file2 = (win_file + 'zyx_rtx_new_mapped_792.xlsx')
+    output_csv = (win_file + 'rtx_new_mapping_list.csv')
+
+    rtx_new_mapping_check(rtx_csv, rtx_file1, rtx_file2, output_csv)
+    print("rtx new 聚合文件已创建。")
+
+    end_time = time.time()
+    print(f"程序执行结束，总耗时 {end_time - start_time:.2f} 秒")
+    
+    print("步骤 1_3 完成")
+    input("按回车键继续...")
+
+
+# 导入xlsx 检查相同酒店，排除后输出 csv
+def step1_4():
+    start_time = time.time()
+    print("执行步骤 1_4...")  
+    
+    
+    rtx_csv = (win_file_rtx + 'rtx_all_hotelMP_0414.xlsx')
+    output_csv = (win_file_rtx + 'rtx_all_hotelMP_0414v1.csv')
+
+    # 示例用法
+    process_and_export_excel(rtx_csv, output_csv)
+
+    end_time = time.time()
+    print(f"程序执行结束，总耗时 {end_time - start_time:.2f} 秒")
+    
+    print("步骤 1_4完成")
+    input("按回车键继续...")
+
+
+# 导入xlsx 检查相同酒店，排除后输出 csv
+def step1_5():
+    start_time = time.time()
+    print("执行步骤 1_5...")  
+    
+    
+    rtx_csv = (win_file_rtx + 'rtx_all_hotelMP_0414.xlsx')
+    output_csv = (win_file_rtx + 'rtx_all_hotelMP_0414v1.csv')
+
+    # 使用示例
+    csv_file_path = (win_file_rtx + 'rtx_all_hotelMP_0414v1.csv')
+    xlsx_file_path = (win_file_rtx + 'ZYX_RTX JP Template (20240207).xlsx')
+    output_file_path = (win_file_rtx + 'rtx_all_hotel_mapping0414v1.xlsx')
+
+    process_and_export_files(csv_file_path, xlsx_file_path, output_file_path)
+
+    end_time = time.time()
+    print(f"程序执行结束，总耗时 {end_time - start_time:.2f} 秒")
+    
+    print("步骤 1_5完成")
+    input("按回车键继续...")
+
+
+# 导入xlsx 检查相同酒店，排除后输出 csv
+def step1_6():
+    start_time = time.time()
+    print("执行步骤 1_6...")  
+    
+    
+    csv_file_path = (win_file_rtx + 'zyxHotelMapping_JP_0409v1.csv')
+    xlsx_file_path = (win_file_rtx + 'rtx_all_hotel_mapping0414v1.xlsx')
+    output_file_path = (win_file_rtx + 'rtx_all_hotel_mapping_last.xlsx')
+
+    process_and_export_files2(csv_file_path, xlsx_file_path, output_file_path)
+
+    end_time = time.time()
+    print(f"程序执行结束，总耗时 {end_time - start_time:.2f} 秒")
+    
+    print("步骤 1_6完成")
+    input("按回车键继续...")
+
 
 # step1 找到的 hotel code 一样的
 # 排序对比内容
@@ -281,6 +511,21 @@ def step7():
     
     print("完成步骤 7...")
     input("按回车键继续...")
+
+
+# 未入住人数确认
+
+def step8():
+
+    print("执行步骤 8 ： 未入住订单核实")
+    input_file = win_file_zyx + "0416_new_version.xlsx"
+                            
+    output_file = win_file_zyx+ "Checked-non-entry-reservation-0416.xlsx"
+
+    process_reservation_data(input_file, output_file)
     
+    print("完成步骤8，未入住订单核实完毕")
+    input("按回车键继续...")
+
 if __name__ == "__main__":
     main()

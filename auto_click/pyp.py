@@ -41,12 +41,12 @@ pc_user_agents = [
 
 '''
 url_1 = "https://www.agoda.com/ja-jp/mimaru-tokyo-hatchobori/hotel/tokyo-jp.html?"  # 目标酒店
-start_date = "2024-09-16" # 开始日期
-num_days = 30 # 连续确认天数
+start_date = "2024-09-25" # 开始日期
+num_days = 1 # 连续确认天数
 los_num = 1 # 连住天数
 adults_num = 2 # 成人数量
 '''
-txt_file_name = "mimaru-tokyo-all.txt" # 有效地址
+txt_file_name = "v925-v5.txt" # 有效地址
 
 # 异步等待并打印倒计时
 async def async_countdown(message, seconds):
@@ -211,7 +211,17 @@ async def visit_and_operate_url(url, proxy_host, proxy_port, proxy_user, proxy_p
             'Accept-Language': 'en-US,en;q=0.9'
         })
         
-
+        # 过滤图片加载
+        '''
+        await page.setRequestInterception(True)
+        async def intercept_request(req):
+            if req.resourceType() in ['image', 'stylesheet']:
+                await req.abort()
+            else:
+                await req.continue_()
+    
+        page.on('request', intercept_request)
+        '''
         # 打印当前IP和请求头信息
         try:
             await page.goto('http://httpbin.org/ip', {'timeout': 60000})  # 修改这里
@@ -242,39 +252,33 @@ async def visit_and_operate_url(url, proxy_host, proxy_port, proxy_user, proxy_p
             # 等待随机时间
             wait_time = generate_random_time(10, 20)
             await async_countdown("完成滚动，开始随机等待", wait_time)
-
+            # 获取点击前的页面URL
+            url_before_click = page.url
             # 尝试找到并点击指定按钮
             try:
                 await page.waitForSelector('button[data-element-supplier-id="28043"]', timeout=48000) #等待48秒
                 print("✿✿✿✿✿ 发现 28043 即将点击 ✿✿✿✿✿")
                 # 等待随机时间
-                await async_countdown("发现按钮，开始等待", generate_random_time(10, 20))
-                # 尝试次数
-                attempts = 3
-                    for attempt in range(attempts):
-                        try:
-                        # 等待按钮可点击
-                        await page.waitForSelector('button[data-element-supplier-id="28043"]:not([disabled])', { 'timeout': 5000 })
-                        # 点击按钮
-                        await page.click('button[data-element-supplier-id="28043"]')
-                        # 等待页面跳转或新元素出现，以此确认点击成功
-                        await page.waitForNavigation({'timeout': 10000, 'waitUntil': 'networkidle2'})
-                        # 或者等待新元素出现
-                        # await page.waitForSelector('新元素的选择器', { 'timeout': 10000 })
-                        button_found = True
-                        break  # 跳转成功，跳出循环
-                    except Exception as e:
-                        print(f"点击尝试 {attempt + 1}/{attempts} 失败: {str(e)}")
-                        # 可以在这里添加一些等待时间
-                        await async_countdown("点击失败，稍等再试", generate_random_time(10, 20))
-                
-                print("按钮点击完成。")
+                await async_countdown("发现按钮，开始等待", generate_random_time(5, 10))
+                await page.click('button[data-element-supplier-id="28043"]')
+                await async_countdown("点击完成，开始等待", generate_random_time(15, 20))
+                # 获取点击后的页面URL
+                url_after_click = page.url
+
+                # 检查URL是否变化且新的URL包含'booking'
+                if url_before_click != url_after_click and 'book/?' in url_after_click:
+                    button_found = True
+                    print("✿✿ 点击按钮成功！✿✿ ")
+                else:
+                    button_found = False  # 或者执行其他的恢复操作
+                    print("XXXXX 点击按钮失败 XXXXX")
                 # 调用 update_find_file 函数更新文件
                 update_find_file(True, url)
             except TimeoutError:
                 print("在指定时间内未找到元素或页面未完全加载。")
                 # 调用 update_find_file 函数，表示没有找到按钮
                 update_find_file(False, url)
+                return # tuichu 
                 
             if button_found:  # 只有当button_found为True时才执行             
                 try:
@@ -282,7 +286,7 @@ async def visit_and_operate_url(url, proxy_host, proxy_port, proxy_user, proxy_p
                 # 在新页面上等待特定元素出现
                     # 模拟页面滚动到底部
                     current_url = page.url
-                    await async_countdown("到达booking Page", generate_random_time(10, 15))
+                    await async_countdown("到达booking Page", generate_random_time(5, 10))
                     print(f"当前URL : {current_url}")
                     
                     print("开始预定页面滚动")
@@ -322,8 +326,11 @@ async def main_loop(proxy_host, proxy_port, proxy_user, proxy_pass):
     #url_1 = "https://www.agoda.com/ja-jp/sunshine-city-prince-hotel-ikebukuro-tokyo/hotel/tokyo-jp.html?"
     #url_1 = "https://www.agoda.com/ko-kr/yufunogo-saigakukan/hotel/yufu-jp.html?"
     # url_1 ="https://www.agoda.com/hotel-oriental-express-fukuoka-nakasu-kawabata/hotel/fukuoka-jp.html?"
-    url_1 = "https://www.agoda.com/ja-jp/hotel-gracery-kyoto-sanjo/hotel/kyoto-jp.html?"
-    start_date = "2024-09-11"  # 开始日期
+    # url_1 = "https://www.agoda.com/ja-jp/hotel-gracery-kyoto-sanjo/hotel/kyoto-jp.html?"
+    url_1 = "https://www.agoda.com/vessel-inn-namba-h15190059/hotel/osaka-jp.html?"
+    
+    
+    start_date = "2024-09-25"  # 开始日期
     num_days = 1  # 连续确认天数
     los_num = 2  # 连住天数
     adults_num = 2  # 成人数量  
@@ -341,6 +348,7 @@ async def main_loop(proxy_host, proxy_port, proxy_user, proxy_pass):
                 print(f"创建的临时用户数据目录: {temp_user_data_dir}")
                 # 构造代理地址字符串
                 proxy_arg = f'--proxy-server={proxy_host}:{proxy_port}'
+                
                 browser = await launch(
                     executablePath=r'C:\Users\gang\AppData\Local\Chromium\Application\chrome.exe',
                     args=[
@@ -349,7 +357,7 @@ async def main_loop(proxy_host, proxy_port, proxy_user, proxy_pass):
                         '--disable-setuid-sandbox',
                         f'--user-agent={random_pc_user_agent}', '--user-data-dir=' + temp_user_data_dir
                         ],
-                        headless=True  # 启用无头模式
+                        headless=True # 启用无头模式
                 )
                 
                 await visit_and_operate_url(url, proxy_host, proxy_port, proxy_user, proxy_pass, browser)      
