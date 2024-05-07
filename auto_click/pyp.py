@@ -1,22 +1,18 @@
-# executablePath=r'C:\Users\gang\AppData\Local\Chromium\Application\chrome.exe',
-
 import asyncio
-from pyppeteer import launch
-from pyppeteer.errors import TimeoutError, PageError, NetworkError
-from pyppeteer import errors as pyppeteer_errors
-
-from fake_useragent import UserAgent
 import random
 import datetime
 import uuid
 import tempfile
 import shutil
-import string  # 确保这行被添加
+import string
 import urllib.parse
 import time
-import aiohttp  # 假设使用 aiohttp 进行异步HTTP请求
 import os
 from time import sleep
+import aiohttp
+from pyppeteer import launch
+from pyppeteer.errors import TimeoutError, PageError, NetworkError
+from fake_useragent import UserAgent
 
 
 # 定义一组PC浏览器的用户代理字符串
@@ -46,7 +42,7 @@ num_days = 1 # 连续确认天数
 los_num = 1 # 连住天数
 adults_num = 2 # 成人数量
 '''
-txt_file_name = "v925-v5.txt" # 有效地址
+txt_file_name = "ak2.txt" # 有效地址
 
 # 异步等待并打印倒计时
 async def async_countdown(message, seconds):
@@ -228,9 +224,8 @@ async def visit_and_operate_url(url, proxy_host, proxy_port, proxy_user, proxy_p
             ip_info = await page.evaluate('() => document.body.textContent')
             print(f"当前 IP: {ip_info}")
 
-        except pyppeteer.errors.TimeoutError:
+        except TimeoutError:
             print("展示IP页面加载超时，继续执行后续操作")
-
         try:
             await page.goto('http://httpbin.org/headers', {'timeout': 60000})  # 修改这里
             headers_info = await page.evaluate('() => document.body.textContent')
@@ -251,7 +246,9 @@ async def visit_and_operate_url(url, proxy_host, proxy_port, proxy_user, proxy_p
             
             # 等待随机时间
             wait_time = generate_random_time(10, 20)
+
             await async_countdown("完成滚动，开始随机等待", wait_time)
+
             # 获取点击前的页面URL
             url_before_click = page.url
             # 尝试找到并点击指定按钮
@@ -327,13 +324,22 @@ async def main_loop(proxy_host, proxy_port, proxy_user, proxy_pass):
     #url_1 = "https://www.agoda.com/ko-kr/yufunogo-saigakukan/hotel/yufu-jp.html?"
     # url_1 ="https://www.agoda.com/hotel-oriental-express-fukuoka-nakasu-kawabata/hotel/fukuoka-jp.html?"
     # url_1 = "https://www.agoda.com/ja-jp/hotel-gracery-kyoto-sanjo/hotel/kyoto-jp.html?"
-    url_1 = "https://www.agoda.com/vessel-inn-namba-h15190059/hotel/osaka-jp.html?"
+    # url_1 = "https://www.agoda.com/vessel-inn-namba-h15190059/hotel/osaka-jp.html?"
+    # url_1 = "https://www.agoda.com/solaria-nishitetsu-hotel-ginza/hotel/tokyo-jp.html?"
+    # url_1 = "https://www.agoda.com/hotel-gracery-ginza/hotel/tokyo-jp.html?"
+    # url_1 = "https://www.agoda.com/shinjuku-washington-hotel-main-building/hotel/tokyo-jp.html?"
+    # url_1 = "https://www.agoda.com/takayama-ouan-hotel/hotel/takayama-jp.html?f"
+    # url_1 = "https://www.agoda.com/r-b-hotel-kyotoeki-hachijouguchi/hotel/kyoto-jp.html?"
+    # url_1 = "https://www.agoda.com/dormy-inn-premium-namba-annex-natural-hot-spring/hotel/osaka-jp.html?"
+    # url_1 = "https://www.agoda.com/vessel-inn-namba-h15190059/hotel/osaka-jp.html?"
+    # url_1 = "https://www.agoda.com/green-rich-hotel-kyoto-eki-minami/hotel/kyoto-jp.html?"
+    url_1 = "https://www.agoda.com/akihabara-washington-hotel/hotel/tokyo-jp.html?"
     
-    
-    start_date = "2024-09-25"  # 开始日期
+
+    start_date = "2024-10-07"  # 开始日期
     num_days = 1  # 连续确认天数
-    los_num = 2  # 连住天数
-    adults_num = 2  # 成人数量  
+    los_num = 1  # 连住天数
+    adults_num = 1  # 成人数量  
     while True:  # 无限循环，每次处理完所有URL后暂停一段时间再重新开始
         urls = read_urls_from_file(txt_file_name) or generate_urls(url_1, start_date, num_days, los_num, adults_num)
         for url in urls:
