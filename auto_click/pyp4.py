@@ -333,13 +333,17 @@ async def main_loop(proxy_host, proxy_port, proxy_user, proxy_pass):
                 # 在函数内部选择随机用户代理
                 random_pc_user_agent = random.choice(pc_user_agents)
                 # 创建临时用户数据目录
-                temp_user_data_dir = tempfile.mkdtemp()
+                # temp_user_data_dir = tempfile.mkdtemp() # win11 用
+
+                # 在 /tmp 目录下创建临时用户数据目录
+                temp_user_data_dir = tempfile.mkdtemp(dir="/tmp") # Linux Debian 用
                 print(f"创建的临时用户数据目录: {temp_user_data_dir}")
                 # 构造代理地址字符串
                 proxy_arg = f'--proxy-server={proxy_host}:{proxy_port}'
                 
                 browser = await launch(
-                    executablePath=r'C:\Users\gang\AppData\Local\Chromium\Application\chrome.exe',
+                    #executablePath=r'C:\Users\gang\AppData\Local\Chromium\Application\chrome.exe', # win11用
+                    executablePath=r'/usr/bin/chromium', # Linux用
                     args=[
                         proxy_arg,
                         '--no-sandbox',
