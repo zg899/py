@@ -46,7 +46,7 @@ num_days = 30 # 连续确认天数
 los_num = 1 # 连住天数
 adults_num = 2 # 成人数量
 '''
-txt_file_name = "s1.txt" # 有效地址
+txt_file_name = "o_1.txt" # 有效地址
 
 # 异步等待并打印倒计时
 async def async_countdown(message, seconds):
@@ -318,9 +318,9 @@ async def main_loop(proxy_host, proxy_port, proxy_user, proxy_pass):
     # url_1 ="https://www.agoda.com/hotel-oriental-express-fukuoka-nakasu-kawabata/hotel/fukuoka-jp.html?"
     # url_1 = "https://www.agoda.com/ja-jp/hotel-gracery-kyoto-sanjo/hotel/kyoto-jp.html?"
     # url_1 = "https://www.agoda.com/dormy-inn-premium-namba-natural-hot-spring/hotel/osaka-jp.html?"
-    url_1 = "https://www.agoda.com/hearton-hotel-kita-umeda/hotel/osaka-jp.html?"
+    url_1 = "https://www.agoda.com/ja-jp/osaka-fujiya-hotel/hotel/osaka-jp.html?"
     
-    start_date = "2024-10-16"  # 开始日期
+    start_date = "2024-09-18"  # 开始日期
     num_days = 1  # 连续确认天数
     los_num = 1  # 连住天数
     adults_num = 2  # 成人数量  
