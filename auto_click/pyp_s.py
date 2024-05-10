@@ -46,7 +46,7 @@ num_days = 30 # 连续确认天数
 los_num = 1 # 连住天数
 adults_num = 2 # 成人数量
 '''
-txt_file_name = "D_1.txt" # 有效地址
+txt_file_name = "D_2.txt" # 有效地址
 
 # 异步等待并打印倒计时
 async def async_countdown(message, seconds):
