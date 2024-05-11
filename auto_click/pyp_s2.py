@@ -46,19 +46,25 @@ def check_chromium_processes():
         print("No cleanup needed.")
 
 def kill_chromium_processes(processes):
-    # 尝试结束每一个进程
     for proc in processes:
         try:
             proc.kill()
             proc.wait(timeout=3)  # 等待进程结束
-            print(f"Process {proc.pid} has been killed.")
+            print(f"进程 {proc.pid} 已被终止。")
         except psutil.NoSuchProcess:
-            print(f"Process {proc.pid} does not exist.")
+            print(f"进程 {proc.pid} 不存在。")
         except psutil.TimeoutExpired:
-            print(f"Process {proc.pid} termination timed out, trying force kill.")
+            print(f"进程 {proc.pid} 终止超时，尝试强制终止。")
             proc.kill()
+            try:
+                proc.wait(timeout=1)  # 再次等待进程结束
+                print(f"进程 {proc.pid} 已被强制终止。")
+            except psutil.TimeoutExpired:
+                print(f"进程 {proc.pid} 强制终止失败。")
+            except psutil.NoSuchProcess:
+                print(f"进程 {proc.pid} 在强制终止后已经不存在了。")
         except Exception as e:
-            print(f"Failed to kill process {proc.pid}: {e}")
+            print(f"终止进程 {proc.pid} 失败: {e}")
 
 
 
