@@ -16,6 +16,7 @@ def analyze_log(log_path):
         clicks_success = 0
         clicks_failed = 0
         not_found_errors = 0
+        consecutive_not_found = 0  # 用于跟踪连续未找到元素的情况
         
         # 正则表达式匹配
         start_pattern = r"main try开始时间: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
@@ -42,6 +43,12 @@ def analyze_log(log_path):
                 clicks_failed += 1
             if re.search(not_found_pattern, line):
                 not_found_errors += 1
+                consecutive_not_found += 1
+                # 检查是否连续三次出现未找到元素
+                if consecutive_not_found == 3:
+                    print("警告！警告！连续三次未找到元素或页面未完全加载。")
+            else:
+                consecutive_not_found = 0  # 重置计数器
         
         # 输出结果
         print(f"Main try开始次数: {len(start_times)}, 最早 {min(start_times) if start_times else 'N/A'}, 最晚 {max(start_times) if start_times else 'N/A'}")
