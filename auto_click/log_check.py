@@ -16,7 +16,11 @@ def analyze_log(log_path):
         clicks_success = 0
         clicks_failed = 0
         not_found_errors = 0
-        consecutive_not_found = 0  # 用于跟踪连续未找到元素的情况
+        consecutive_not_found = 0
+        max_chromium_processes = 0
+        last_chromium_processes = 0
+        max_current_chromium = 0
+        last_current_chromium = 0
         
         # 正则表达式匹配
         start_pattern = r"main try开始时间: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
@@ -26,7 +30,9 @@ def analyze_log(log_path):
         success_click_pattern = r"点击按钮成功！"
         failed_click_pattern = r"点击按钮失败"
         not_found_pattern = r"在指定时间内未找到元素或页面未完全加载。"
-        
+        chromium_processes_pattern = r"Found (\d+) Chromium processes running."
+        current_chromium_pattern = r"当前运行chromium: (\d+)"
+
         for line in content:
             if re.search(start_pattern, line):
                 start_times.append(re.search(start_pattern, line).group(1))
@@ -44,11 +50,18 @@ def analyze_log(log_path):
             if re.search(not_found_pattern, line):
                 not_found_errors += 1
                 consecutive_not_found += 1
-                # 检查是否连续三次出现未找到元素
                 if consecutive_not_found == 3:
                     print("警告！警告！连续三次未找到元素或页面未完全加载。")
             else:
-                consecutive_not_found = 0  # 重置计数器
+                consecutive_not_found = 0
+            if match := re.search(chromium_processes_pattern, line):
+                chromium_processes = int(match.group(1))
+                max_chromium_processes = max(max_chromium_processes, chromium_processes)
+                last_chromium_processes = chromium_processes
+            if match := re.search(current_chromium_pattern, line):
+                current_chromium = int(match.group(1))
+                max_current_chromium = max(max_current_chromium, current_chromium)
+                last_current_chromium = current_chromium
         
         # 输出结果
         print(f"Main try开始次数: {len(start_times)}, 最早 {min(start_times) if start_times else 'N/A'}, 最晚 {max(start_times) if start_times else 'N/A'}")
@@ -58,6 +71,8 @@ def analyze_log(log_path):
         print(f"点击按钮成功次数: {clicks_success}")
         print(f"点击按钮失败次数: {clicks_failed}")
         print(f"未找到元素或页面未完全加载次数: {not_found_errors}")
+        print(f"Found Chromium processes running: 最大次数 {max_chromium_processes}, 最后一次记录的次数 {last_chromium_processes}")
+        print(f"当前运行chromium: 最大次数 {max_current_chromium}, 最后一次记录的次数 {last_current_chromium}")
     
     except FileNotFoundError:
         print(f"No such file: {log_path}")
