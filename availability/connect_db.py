@@ -3,7 +3,22 @@ from bson.json_util import dumps
 import csv
 from datetime import datetime, timedelta
 import pprint  # 导入pprint模块
-
+from tqdm import tqdm
+import pandas as pd
+import pytz
+'''
+agoda:M219121176
+ctripJP:M219081094
+ctripKR:M218090612
+ctripCN:M218050500
+qunar:M218070568
+meituanKR:M219121196
+meituanJP:M217110390
+alitripCN:M223111292
+alitripJP:M219060970
+yanolja:M223011284
+tongcheng:M224041306
+'''
 #------------------------连接到数据库验证部分--------------------------#
 # 从库地址列表
 secondary_addresses = [
@@ -48,7 +63,62 @@ input("回车继续")
 
 
 
+#------------------------获取1小时内可定请求数据，导出到csv--------------------------#
 
+# MongoDB连接字符串
+primary = "172.17.1.91:27017"
+secondary1 = "172.17.1.92:27017"
+secondary2 = "172.17.1.93:27017"
+replica_set = "zyx-mrs-g2"
+read_preference = "secondaryPreferred"
+database_name = "cache_hotel_data"
+collection_name = "zyx_api_monitor"
+
+# 创建MongoClient实例
+client = MongoClient(
+    f"mongodb://{primary},{secondary1},{secondary2}/?replicaSet={replica_set}&readPreference={read_preference}"
+)
+
+# 选择数据库和集合
+db = client[database_name]
+collection = db[collection_name]
+
+# 获取当前时间和1小时前的时间，并调整时区
+local_tz = pytz.timezone('Asia/Tokyo')  # 本地时区
+server_tz = pytz.timezone('UTC')  # 服务器时区，如果是UTC的话
+now = datetime.now(local_tz)
+
+# 调整时间为服务器时区
+end_time = now.astimezone(server_tz)
+start_time = end_time - timedelta(hours=1)
+
+# 打印时间范围以便调试
+print(f"Fetching data from {start_time} to {end_time} (server time)")
+
+# 查询条件
+query = {
+    "requestTime": {
+        "$gte": start_time,
+        "$lt": end_time
+    },
+    "requestCode": "M219121176",
+    "requestType": "CHECK_AVAIL",
+    #"hotelCode": {"$regex": ".*KR*."},
+    #"valid": True
+}
+
+# 执行查询
+results = collection.find(query)
+
+# 将结果转换为DataFrame
+df = pd.DataFrame(list(results))
+
+# 导出到CSV文件，确保路径有写权限
+csv_file = "keding_output.csv"
+df.to_csv(csv_file, index=False)
+
+print(f"Data has been successfully exported to {csv_file}")
+input("回车继续")
 
 #------------------------获取1分钟请求数据，导出到csv--------------------------#
 
@@ -60,13 +130,22 @@ secondary_addresses = [
 ]
 database_name = 'cache_hotel_data'
 
+# 查询条件
+request_code = 'M219121176'
+start_time = datetime.fromisoformat('2024-05-11T20:30:00+08:00')
+end_time = datetime.fromisoformat('2024-05-11T20:31:00+08:00')
+
 # 连接到 MongoDB
 client = MongoClient(primary_address, replicaSet='zyx-mrs-g2', readPreference='secondaryPreferred')
 db = client[database_name]
 print("成功连接到数据库:", database_name)
 
-# 执行查询获取最近的100条数据
-cursor = db['zyx_api_search_monitor'].find().sort('_id', -1).limit(10000)
+# 执行查询获取符合条件的数据
+query = {
+    'requestTime': {'$gte': start_time, '$lt': end_time},
+    'requestCode': request_code
+}
+cursor = db['zyx_api_search_monitor'].find(query)
 documents = list(cursor)
 
 # 获取字段名列表
@@ -75,15 +154,14 @@ for document in documents:
     fieldnames.update(document.keys())
 
 # 导出到CSV文件
-csv_output_path = 'recent_search_results.csv'
+csv_output_path = 'search_results.csv'
 with open(csv_output_path, 'w', newline='') as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
-    for document in documents:
+    for document in tqdm(documents, desc="导出进度"):
         writer.writerow(document)
 
-print("最近的100条数据已导出到CSV文件:", csv_output_path)
-
+print("查询结果已导出到CSV文件:", csv_output_path)
 
 input("回车继续")
 
@@ -131,3 +209,4 @@ with open(csv_output_path, 'w', newline='') as csvfile:
     for data in csv_data:
         writer.writerow(data)
 print("酒店数据导出到CSV文件成功:", csv_output_path)
+
