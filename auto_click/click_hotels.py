@@ -2,7 +2,7 @@
 logPath = r'/logs'  # Linux用
 
 def hotel_url():
-    txt_file_name = logPath + "/url0514.txt"  # 注意路径拼接时需要添加斜杠
+    txt_file_name = "url0514.txt"  # 注意路径拼接时需要添加斜杠
     url_1 = "https://www.agoda.com/tokyo-green-palace-hotel/hotel/tokyo-jp.html?"  # URL地址
     start_date = "2024-11-01"  # 开始日期
     num_days = 1  # 连续确认天数
