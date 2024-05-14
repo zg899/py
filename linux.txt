@@ -1,0 +1,23 @@
+ssh -p1918 webrun@172.17.6.11
+ssh -p1918 webrun@172.17.6.12
+
+#开启进程
+nohup python pyp_s3.py >log1 2>&1 &
+nohup python pyp_s3.py 
+#确认当前进程
+ps aux | grep pyp_s3.py
+
+#杀掉单个进程
+kill -15 1234
+kill -9 5678
+
+#杀掉所有进程
+ps aux | grep pyp_s3.py | grep -v grep | awk '{print $2}' | xargs kill -9
+
+#获得最新git
+git pull
+
+#删除文件
+rm filename.txt
+
+
