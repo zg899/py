@@ -3,8 +3,13 @@ import re
 
 def analyze_log(log_path):
     try:
-        with open(log_path, 'r') as file:
-            content = file.readlines()
+        # 尝试使用不同的编码读取文件
+        try:
+            with open(log_path, 'r', encoding='utf-8') as file:
+                content = file.readlines()
+        except UnicodeDecodeError:
+            with open(log_path, 'r', encoding='latin-1') as file:
+                content = file.readlines()
         
         # 初始化数据结构
         start_times = []
