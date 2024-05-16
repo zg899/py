@@ -1,7 +1,5 @@
+import argparse
 import re
-
-# 日志文件路径
-log_path = 'nohup.out'
 
 def analyze_log(log_path):
     try:
@@ -32,7 +30,7 @@ def analyze_log(log_path):
         not_found_pattern = r"在指定时间内未找到元素或页面未完全加载。"
         chromium_processes_pattern = r"Found (\d+) Chromium processes running."
         current_chromium_pattern = r"当前运行chromium: (\d+)"
-
+        
         for line in content:
             if re.search(start_pattern, line):
                 start_times.append(re.search(start_pattern, line).group(1))
@@ -77,5 +75,18 @@ def analyze_log(log_path):
     except FileNotFoundError:
         print(f"No such file: {log_path}")
 
-# 调用函数
-analyze_log(log_path)
+def main():
+    # 创建ArgumentParser对象
+    parser = argparse.ArgumentParser(description='Analyze log file')
+    
+    # 添加命令行参数
+    parser.add_argument('logfile', type=str, help='Path to the log file')
+    
+    # 解析命令行参数
+    args = parser.parse_args()
+    
+    # 调用日志分析函数
+    analyze_log(args.logfile)
+
+if __name__ == '__main__':
+    main()
